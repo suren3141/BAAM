@@ -14,10 +14,6 @@ from trainner import train_model
 from tester import test_model
 from model.config import add_default_config
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-t', '--train', dest='train', action='store_true', help='train model before evaluation')
-args = parser.parse_args()
-
 
 
 def main(cfg):
@@ -25,6 +21,8 @@ def main(cfg):
     # Prepare save folder
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
     os.system(f'cp {config} {cfg.OUTPUT_DIR}/config.yaml')
+
+    print(cfg)
 
     # Load model and pre-trained weights
     print('Load.... model')
@@ -46,10 +44,15 @@ def main(cfg):
 
 if __name__ == '__main__':
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-t', '--train', dest='train', action='store_true', help='train model before evaluation')
+    parser.add_argument('-c', '--config', dest='config', default='configs/custom.yaml', help='config file')
+    args = parser.parse_args()
+
     # Load config
     setup_logger()
     cfg = get_cfg()
     add_default_config(cfg)
-    config = 'configs/custom.yaml'
+    config = args.config
     cfg.merge_from_file(config)
     main(cfg)
