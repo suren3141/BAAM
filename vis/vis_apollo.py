@@ -15,12 +15,15 @@ import open3d as o3d
 # setting
 os.makedirs(args.save,exist_ok=True)
 # load vert index
-_, face, _ = load_obj('../apollo_deform/0.obj')
+file_dir = os.path.split(os.path.abspath(__file__))[0]
+obj_file = os.path.join(file_dir, '../apollo_deform/0.obj')
+_, face, _ = load_obj(obj_file)
 face = face.verts_idx.numpy()
 # load class scales
 scales = {}
 for i in range(79):
-    vert, _, _ = load_obj('car_models/{}.obj'.format(i))
+    obj_file = os.path.join(file_dir, 'car_models/{}.obj'.format(i))
+    vert, _, _ = load_obj(obj_file)
     vert = vert.numpy()
     scales[i] = uts.call_scale(vert)
 # load perdiction results
@@ -67,6 +70,7 @@ vis = uts.VisOpen3D(width=1920, height=1080,visible=True)
 for obj in o3d_list:
     vis.add_geometry(obj)
 vis.mesh_show_back_face()
-vis.load_view_point("view_point_3d.json")
+json_file = os.path.join(file_dir, "view_point_3d.json")
+vis.load_view_point(json_file)
 vis.run()
 vis.capture_screen_image(os.path.join(args.save, f'{args.file}.3d.png'))
