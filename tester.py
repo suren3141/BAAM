@@ -68,7 +68,11 @@ def save_results(inputs, outputs, cfg, save_path = (None,None), thr=0):
         pred_trans = instances.pred_trans.cpu().detach().numpy()
         pred_meshes = instances.pred_meshes.cpu().detach().numpy()
         log_variance = (-(0.5*instances.log_variance).exp()).exp().cpu().detach().numpy()
-        pred_keypoints = instances.pred_keypoints.cpu().detach().numpy()
+
+        if hasattr(instances, 'pred_keypoints'):
+            pred_keypoints = instances.pred_keypoints.cpu().detach().numpy()
+        else:
+            pred_keypoints = None
 
         # Save results to Apollo3D format
         results = []
@@ -83,14 +87,23 @@ def save_results(inputs, outputs, cfg, save_path = (None,None), thr=0):
             trans = pred_trans[idx].tolist()
             pred_car = int(pred_classes[idx])
             x1, y1, x2, y2 = pred_boxes[idx]
-            keypoint = pred_keypoints[idx]
+
+            if pred_keypoints is not None:
+                keypoint = pred_keypoints[idx]
+            else:
+                keypoint = None
 
             obj['pose'] = [float(i) for i in rotate + trans]   
             obj['car_id'] = pred_car
             obj['score'] = score
             obj['bbox'] = [float(i) for i in [x1, y1, x2, y2]]
-            obj['visible_rate'] = 1.0        
-            obj['keypoints'] = keypoint.reshape(66*3,).tolist()
+            obj['visible_rate'] = 1.0
+
+            if keypoint is not None:                
+                obj['keypoints'] = keypoint.reshape(66*3,).tolist()
+            else:
+                obj['keypoints'] = None
+
     
             results.append(obj)
             vert = pred_meshes[idx]

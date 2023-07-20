@@ -22,8 +22,6 @@ def main(cfg):
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
     os.system(f'cp {config} {cfg.OUTPUT_DIR}/config.yaml')
 
-    print(cfg)
-
     # Load model and pre-trained weights
     print('Load.... model')
     model = build_model(cfg)
@@ -46,13 +44,22 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--train', dest='train', action='store_true', help='train model before evaluation')
-    parser.add_argument('-c', '--config', dest='config', default='configs/custom.yaml', help='config file')
+    parser.add_argument('-c', '--config', type=str, default = 'configs/custom.yaml', help='config file')
+    parser.add_argument('-o', '--output', type=str, help='output directory')
     args = parser.parse_args()
+
+    print(args)
+
 
     # Load config
     setup_logger()
     cfg = get_cfg()
     add_default_config(cfg)
     config = args.config
+    #config = 'configs/custom.yaml'
     cfg.merge_from_file(config)
+
+    if args.output is not None:
+        cfg.OUTPUT_DIR = args.output
+    print(cfg)
     main(cfg)

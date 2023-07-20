@@ -281,6 +281,9 @@ class BAAMROIHeads(ROIHeads):
             self.keypoint_in_features = keypoint_in_features
             self.keypoint_pooler = keypoint_pooler
             self.keypoint_head = keypoint_head
+        else:
+            self.keypoint_in_features = []
+
 
         self.train_on_pred_boxes = train_on_pred_boxes
         roi_dim = input_shape[box_in_features[0]].channels
@@ -390,8 +393,9 @@ class BAAMROIHeads(ROIHeads):
         self.hidden_dim = 256
         self.roi_dim = 128
         self.num_global_context = 8
-        self.heatmap_dim = 66
-        self.keypoint_dim = 300
+
+        self.heatmap_dim = 66 if self.keypoint_on else 0
+        self.keypoint_dim = 300 if self.keypoint_on else 0
 
         self._global_features = nn.Sequential(OrderedDict([
             ('conv1', nn.Conv2d(self.input_dim, self.hidden_dim, 3, 1, 1)),
@@ -425,14 +429,14 @@ class BAAMROIHeads(ROIHeads):
 
         # keypoint extactor
         self._keypoint_pos = nn.Sequential(OrderedDict([
-            ('fc1', nn.Linear(66*2, self.keypoint_dim)),
+            ('fc1', nn.Linear(self.heatmap_dim*2, self.keypoint_dim)),
             ('act1', nn.GELU()),
             ('fc2', nn.Linear(self.keypoint_dim, self.keypoint_dim)),
         ]))
         
         # keypoint visibility extractor
         self._keypoint_weights = nn.Sequential(OrderedDict([
-            ('fc1', nn.Linear(66, self.keypoint_dim)),
+            ('fc1', nn.Linear(self.heatmap_dim, self.keypoint_dim)),
             ('act1', nn.GELU()),
             ('fc2', nn.Linear(self.keypoint_dim, self.keypoint_dim)),
         ]))
@@ -514,7 +518,7 @@ class BAAMROIHeads(ROIHeads):
             # # add 2D Head Loss
             box_losses = self._forward_box(features, proposals)
             losses.update(box_losses)
-            if train_key :
+            if train_key and self.keypoint_on:
                 kpt_losses, proposals = self._forward_keypoint(features, proposals)
                 losses.update(kpt_losses)
             if train_3d:
@@ -551,8 +555,10 @@ class BAAMROIHeads(ROIHeads):
         """
         assert not self.training
         assert instances[0].has("pred_boxes") and instances[0].has("pred_classes")
-        
-        _, instances = self._forward_keypoint(features, instances)
+
+        if self.keypoint_on:    
+            _, instances = self._forward_keypoint(features, instances)
+
         instances = self._forward_3d_pose(features,  instances)
         return instances
 
@@ -680,21 +686,27 @@ class BAAMROIHeads(ROIHeads):
         new_box_pos[:,3] = (box_pos[:,3] - box_pos[:,1]) / self.ry / self.camera_intrisic[1]
         box_pos_features = self._box_pos(new_box_pos)
 
-        # keypoint coord features
-        keypoint_pos = torch.cat([p.pred_keypoints for p in proposals], dim=0)
-        new_keypoint_pos = keypoint_pos.clone()
-        # nomarlize keypoint coord
-        new_keypoint_pos[:,:,0] = (keypoint_pos[:,:,0]/self.rx - self.camera_intrisic[2]) / self.camera_intrisic[0]
-        new_keypoint_pos[:,:,1] = (keypoint_pos[:,:,1]/self.ry - self.camera_intrisic[3]) / self.camera_intrisic[1]
-        # multiply visibility
-        keypoints_vis = new_keypoint_pos[:,:,2]
-        new_keypoint_pos = new_keypoint_pos[:,:,:2].reshape(keypoint_pos.shape[0], -1)
-        keypoint_pos_features = self._keypoint_pos(new_keypoint_pos)
-        keypoints_weights = self._keypoint_weights(keypoints_vis)
-        keypoint_pos_features *= keypoints_weights.sigmoid()
+        if self.keypoint_on:
+
+            # keypoint coord features
+            keypoint_pos = torch.cat([p.pred_keypoints for p in proposals], dim=0)
+            new_keypoint_pos = keypoint_pos.clone()
+            # nomarlize keypoint coord
+            new_keypoint_pos[:,:,0] = (keypoint_pos[:,:,0]/self.rx - self.camera_intrisic[2]) / self.camera_intrisic[0]
+            new_keypoint_pos[:,:,1] = (keypoint_pos[:,:,1]/self.ry - self.camera_intrisic[3]) / self.camera_intrisic[1]
+            # multiply visibility
+            keypoints_vis = new_keypoint_pos[:,:,2]
+            new_keypoint_pos = new_keypoint_pos[:,:,:2].reshape(keypoint_pos.shape[0], -1)
+            keypoint_pos_features = self._keypoint_pos(new_keypoint_pos)
+            keypoints_weights = self._keypoint_weights(keypoints_vis)
+            keypoint_pos_features *= keypoints_weights.sigmoid()
 
         # object featueres
-        object_features = torch.cat([roi_features, box_pos_features, keypoint_pos_features], dim= 1)
+
+        if self.keypoint_on:
+            object_features = torch.cat([roi_features, box_pos_features, keypoint_pos_features], dim= 1)
+        else:
+            object_features = torch.cat([roi_features, box_pos_features], dim= 1)
 
         # predict translation
         num_inst_per_image = [len(p) for p in proposals]

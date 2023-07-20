@@ -1,6 +1,6 @@
 _BASE_: "res2net-bifpn.yaml" 
 MODEL:
-  WEIGHTS: res2net_bifpn.pth
+  WEIGHTS: outputs_no_key/model_final.pth
   DEVICE: 'cuda:0'
   BACKBONE:
     FREEZE_AT: 2

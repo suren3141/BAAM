@@ -49,6 +49,8 @@ def nms_single_img(proposal):
     result.pred_trans = proposal.pred_trans[indices][mask][:maxDet]
     result.pred_meshes = proposal.pred_meshes[indices][mask][:maxDet]
     result.log_variance = proposal.log_variance[indices][mask][:maxDet]
-    result.pred_keypoints= proposal.pred_keypoints[indices][mask][:maxDet]
+
+    if hasattr(proposal, 'pred_keypoints'):
+        result.pred_keypoints= proposal.pred_keypoints[indices][mask][:maxDet]
 
     return result

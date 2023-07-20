@@ -352,10 +352,10 @@ class Detect3DEval(object):
         rel_tps = rel_dtm != 0
         rel_fps = rel_dtm == 0
 
-        abs_tp_sum = np.cumsum(abs_tps, axis=1).astype(dtype=np.float)
-        abs_fp_sum = np.cumsum(abs_fps, axis=1).astype(dtype=np.float)
-        rel_tp_sum = np.cumsum(rel_tps, axis=1).astype(dtype=np.float)
-        rel_fp_sum = np.cumsum(rel_fps, axis=1).astype(dtype=np.float)
+        abs_tp_sum = np.cumsum(abs_tps, axis=1).astype(dtype=np.float32)
+        abs_fp_sum = np.cumsum(abs_fps, axis=1).astype(dtype=np.float32)
+        rel_tp_sum = np.cumsum(rel_tps, axis=1).astype(dtype=np.float32)
+        rel_fp_sum = np.cumsum(rel_fps, axis=1).astype(dtype=np.float32)
 
         for t, (abs_tp, abs_fp, rel_tp, rel_fp) in enumerate(zip(abs_tp_sum, abs_fp_sum, rel_tp_sum, rel_fp_sum)):
             abs_tp = np.array(abs_tp)
@@ -532,9 +532,13 @@ class Detect3DEval(object):
     def load_car_models(self):
         """Load all the car models
         """
+
+        file_dir = os.path.split(os.path.abspath(__file__))[0]
+        json_file = os.path.join(file_dir, 'id_to_abb.json')
+
         self.car_models = OrderedDict([])
         print('Load car models....(it trakes some minutes)')
-        ids = json.load(open('id_to_abb.json'))
+        ids = json.load(open(json_file))
 
         for model in tqdm(ids.keys()):
 
@@ -542,7 +546,8 @@ class Detect3DEval(object):
                 # Load mask directly
                 masks = np.zeros((10,128,128))
                 for i in range(0,10):
-                    mask = cv2.imread('rot10/{0}rot{1}.png'.format(model,i))
+                    img_name = os.path.join(file_dir, 'rot10/{0}rot{1}.png'.format(model,i))
+                    mask = cv2.imread(img_name)
                     mask = mask[...,0]/255
                     masks[i] = mask
                 self.car_models[int(model)] = masks
@@ -554,11 +559,9 @@ class Detect3DEval(object):
                     masks[i] = mask
                 self.car_models[int(model)] = masks
 
-        gsnet_mesh = load_obj('../apollo_deform/0.obj')
+        obj_name = os.path.join(file_dir, '../apollo_deform/0.obj')
+        gsnet_mesh = load_obj(obj_name)
         self.car_models_face = gsnet_mesh[1].verts_idx.numpy()
-
-    def __str__(self):
-        self.summarize()
 
 
 class Params(object):
