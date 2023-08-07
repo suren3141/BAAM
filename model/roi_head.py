@@ -172,16 +172,17 @@ class BCA(nn.Module):
         x = x + self.scale3 * h3
         return x
 
-
 class ShapeFusion(nn.Module):
-    def __init__(self, M, V, input_dim, output_dim=128, num_head = 8, attention_layers=2):
+    def __init__(self, M, V, input_dim, output_dim=128, num_head = 8, attention_layers=2, use_templates=True):
         super(ShapeFusion, self).__init__()
         self.output_dim = output_dim
 
-        self.M = nn.Parameter(M.clone(), requires_grad=False)
-        self.V = nn.Parameter(V.clone() - M.clone(), requires_grad=False)
-        self.E = nn.Parameter(torch.rand(V.shape[0], input_dim), requires_grad=True)
-        torch.nn.init.xavier_normal_(self.E)
+        self.M = nn.Parameter(M.clone(), requires_grad=False)  # [1, 3V] : Mean shape
+
+        if use_templates:
+            self.V = nn.Parameter(V.clone() - M.clone(), requires_grad=False) # [T, 3V] : Template offsets
+            self.E = nn.Parameter(torch.rand(V.shape[0], input_dim), requires_grad=True) # [T, input] Template embedding (to be learned)
+            torch.nn.init.xavier_normal_(self.E)
 
         self.roi_embdedding = nn.Linear(input_dim, output_dim)
         self.q = nn.Sequential(
@@ -190,6 +191,7 @@ class ShapeFusion(nn.Module):
         )
         self.k = nn.Linear(input_dim, output_dim)
         self.v = nn.Linear(input_dim, output_dim)
+
         self.u = nn.Sequential(
             nn.Linear(output_dim,output_dim),
             nn.GELU(),
@@ -199,15 +201,22 @@ class ShapeFusion(nn.Module):
         self.softmax = nn.Softmax(-1)
         self.n_verts = self.M.shape[1]//3
 
+        self.use_templates = use_templates
+
     def forward(self, x):
 
         N = x.shape[0]
     
         # Q, K, V
-        x = self.roi_embdedding(x)
-        q = self.q(x)
-        k = self.k(self.E) 
-        v = self.v(self.E)
+        x = self.roi_embdedding(x)  # [N, output]
+        q = self.q(x)               # [N, output]
+
+        if self.use_templates:
+            k = self.k(self.E)      # [T, output]
+            v = self.v(self.E)      # [T, output]
+        else:
+            k = self.k(x)           # [N, output]
+            v = self.v(x)           # [N, output]
 
         # make attention matrix
         attn_logit = q @ k.transpose(0, 1) / np.sqrt(self.output_dim) 
@@ -215,10 +224,13 @@ class ShapeFusion(nn.Module):
         x = attn @ v + x
 
         # mesh
-        coarse_mesh = (attn @ self.V)
-        coarse_mesh = coarse_mesh + self.u(x)
+        template_deformation = attn @ self.V
+        object_deformation = self.u(x)
+        coarse_mesh = template_deformation + object_deformation
 
-        return (self.M + coarse_mesh).view(N, self.n_verts, 3)
+        fine_mesh = self.M + coarse_mesh
+
+        return fine_mesh.view(N, self.n_verts, 3)
 
 @ROI_HEADS_REGISTRY.register()
 class BAAMROIHeads(ROIHeads):
