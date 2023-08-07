@@ -296,11 +296,12 @@ class BAAMROIHeads(ROIHeads):
         else:
             self.keypoint_in_features = []
 
+        self.use_templates = False      # TODO : Get from cfg
 
         self.train_on_pred_boxes = train_on_pred_boxes
         roi_dim = input_shape[box_in_features[0]].channels
         self.device = device
-        self._init_pose_head(roi_dim)
+        self._init_pose_head(roi_dim, self.use_templates)
         # inference all boxes
         self.box_predictor.test_score_thresh = 0
 
@@ -392,7 +393,7 @@ class BAAMROIHeads(ROIHeads):
         ret["keypoint_head"] = build_keypoint_head(cfg, shape)
         return ret
 
-    def _init_pose_head(self, input_dim):
+    def _init_pose_head(self, input_dim, use_templates=True):
         
         # set parameters
         self.camera_intrisic = [2304.54786556982, 2305.875668062, 1686.23787612802, 1354.98486439791]
@@ -490,7 +491,7 @@ class BAAMROIHeads(ROIHeads):
         self.init_M = torch.from_numpy(np.load(template_path + 'M.npy').astype('float32')).to(self.device)
         self.n_verts = self.init_M.shape[1]//3
 
-        self._shape_fusion = ShapeFusion(self.init_M, self.init_V, self.hidden_dim, self.hidden_dim, num_head = 8, attention_layers=2)
+        self._shape_fusion = ShapeFusion(self.init_M, self.init_V, self.hidden_dim, self.hidden_dim, num_head = 8, attention_layers=2, use_templates=use_templates)
     
         self.initialize_weights()
 

@@ -57,6 +57,7 @@ if __name__ == '__main__':
     add_default_config(cfg)
     config = args.config
     #config = 'configs/custom.yaml'
+    cfg.set_new_allowed(True)
     cfg.merge_from_file(config)
 
     if args.output is not None:
