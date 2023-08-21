@@ -173,7 +173,7 @@ class BCA(nn.Module):
         return x
 
 class ShapeFusion(nn.Module):
-    def __init__(self, M, V, input_dim, output_dim=128, num_head = 8, attention_layers=2, use_templates=True):
+    def __init__(self, M, V, input_dim, output_dim=128, num_head = 8, attention_layers=2, use_templates=True, use_mean_shapes=True):
         super(ShapeFusion, self).__init__()
         self.output_dim = output_dim
 
@@ -202,6 +202,7 @@ class ShapeFusion(nn.Module):
         self.n_verts = self.M.shape[1]//3
 
         self.use_templates = use_templates
+        self.use_mean_shapes = use_mean_shapes
 
     def forward(self, x):
 
@@ -224,11 +225,18 @@ class ShapeFusion(nn.Module):
         x = attn @ v + x
 
         # mesh
-        template_deformation = attn @ self.V
         object_deformation = self.u(x)
-        coarse_mesh = template_deformation + object_deformation
 
-        fine_mesh = self.M + coarse_mesh
+        if self.use_templates:
+            template_deformation = attn @ self.V
+            coarse_mesh = template_deformation + object_deformation
+        else:
+            coarse_mesh = object_deformation
+
+        if self.use_mean_shapes:
+            fine_mesh = self.M + coarse_mesh
+        else:
+            fine_mesh = coarse_mesh
 
         return fine_mesh.view(N, self.n_verts, 3)
 
@@ -281,6 +289,11 @@ class BAAMROIHeads(ROIHeads):
             train_on_pred_boxes (bool): whether to use proposal boxes or
                 predicted boxes from the box head to train other heads.
         """
+
+        self.use_templates = kwargs.pop('use_templates')
+        self.use_mean_shapes = kwargs.pop('use_mean_shapes') 
+        self.object_feat_scale = kwargs.pop('object_feat_scale') 
+
         super().__init__(**kwargs)
         # keep self.in_features for backward compatibility
         self.in_features = self.box_in_features = box_in_features
@@ -296,12 +309,10 @@ class BAAMROIHeads(ROIHeads):
         else:
             self.keypoint_in_features = []
 
-        self.use_templates = False      # TODO : Get from cfg
-
         self.train_on_pred_boxes = train_on_pred_boxes
         roi_dim = input_shape[box_in_features[0]].channels
         self.device = device
-        self._init_pose_head(roi_dim, self.use_templates)
+        self._init_pose_head(roi_dim)
         # inference all boxes
         self.box_predictor.test_score_thresh = 0
 
@@ -320,6 +331,11 @@ class BAAMROIHeads(ROIHeads):
             ret.update(cls._init_keypoint_head(cfg, input_shape))
         ret.update({'input_shape':input_shape})
         ret['device'] = cfg.MODEL.DEVICE
+
+        ret['use_templates'] = cfg.MODEL.TEMPLATE_ON if hasattr(cfg.MODEL, 'TEMPLATE_ON') else True
+        ret['use_mean_shapes'] = cfg.MODEL.MEAN_SHAPE_ON if hasattr(cfg.MODEL, 'MEAN_SHAPE_ON') else True
+        ret['object_feat_scale'] = cfg.MODEL.SCALE if hasattr(cfg.MODEL, 'SCALE') else 1.0
+
         return ret
 
     @classmethod
@@ -393,7 +409,7 @@ class BAAMROIHeads(ROIHeads):
         ret["keypoint_head"] = build_keypoint_head(cfg, shape)
         return ret
 
-    def _init_pose_head(self, input_dim, use_templates=True):
+    def _init_pose_head(self, input_dim):
         
         # set parameters
         self.camera_intrisic = [2304.54786556982, 2305.875668062, 1686.23787612802, 1354.98486439791]
@@ -404,7 +420,7 @@ class BAAMROIHeads(ROIHeads):
         # set feature dimension
         self.input_dim = input_dim
         self.hidden_dim = 256
-        self.roi_dim = 128
+        self.roi_dim = int(128 * self.object_feat_scale)
         self.num_global_context = 8
 
         self.heatmap_dim = 66 if self.keypoint_on else 0
@@ -491,7 +507,7 @@ class BAAMROIHeads(ROIHeads):
         self.init_M = torch.from_numpy(np.load(template_path + 'M.npy').astype('float32')).to(self.device)
         self.n_verts = self.init_M.shape[1]//3
 
-        self._shape_fusion = ShapeFusion(self.init_M, self.init_V, self.hidden_dim, self.hidden_dim, num_head = 8, attention_layers=2, use_templates=use_templates)
+        self._shape_fusion = ShapeFusion(self.init_M, self.init_V, self.hidden_dim, self.hidden_dim, num_head = 8, attention_layers=2, use_templates=self.use_templates, use_mean_shapes=self.use_mean_shapes)
     
         self.initialize_weights()
 
