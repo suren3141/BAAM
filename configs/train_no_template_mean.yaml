@@ -18,6 +18,7 @@ MODEL:
     CLS_AGNOSTIC_BBOX_REG: True
   KEYPOINT_ON: True
   TEMPLATE_ON: False  # No templates
+  MEAN_SHAPE_ON: False  # No mean shape
   ROI_KEYPOINT_HEAD:
     NUM_KEYPOINTS: 66
   RPN:
@@ -39,4 +40,4 @@ DATASETS:
   RESIZE: (1355,1692) # (H, W)
 
 OUTPUT_DIR:
-  'outputs_no_template'
+  'outputs_no_template_mean'
